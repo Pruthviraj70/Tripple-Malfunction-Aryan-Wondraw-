@@ -1,2 +1,2 @@
-# Tripple-Malfunction-Aryan-Wondra-
+# Tripple-Malfunction-Aryan-Wondraw-
 IEEE Hackathon (Xypher)
