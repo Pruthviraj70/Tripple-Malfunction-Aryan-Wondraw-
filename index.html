@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Micro-Lending App</title>
+  <style>
+    /* Reset & base styles */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f4f6f8; padding: 20px; }
+
+    h1 { text-align: center; font-size: 2.5rem; margin-bottom: 20px; color: #1f2937; }
+    h2 { font-size: 1.5rem; margin-bottom: 10px; color: #111827; }
+    h3 { font-size: 1.2rem; margin-bottom: 10px; color: #1f2937; }
+
+    .section { background: #fff; padding: 20px; margin-bottom: 20px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+    input, select, button { padding: 8px; margin: 5px 0; border-radius: 5px; border: 1px solid #ccc; font-size: 1rem; }
+    button { cursor: pointer; border: none; color: #fff; background-color: #3b82f6; transition: background 0.3s; }
+    button:hover { background-color: #2563eb; }
+
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { border: 1px solid #e5e7eb; padding: 10px; text-align: center; }
+    th { background-color: #e5e7eb; }
+    td button { background-color: #10b981; }
+    td button:hover { background-color: #059669; }
+
+    /* Responsive layout */
+    @media (max-width: 600px) {
+      table, th, td { font-size: 0.9rem; }
+    }
+
+    .hidden { display: none; }
+    .msg { margin-top: 10px; font-weight: bold; }
+  </style>
+</head>
+<body>
+
+<h1>🚀 Micro-Lending App</h1>
+
+<!-- User Registration -->
+<div class="section">
+  <h2>Register User</h2>
+  <div style="display:flex; flex-wrap:wrap; gap:10px;">
+    <input id="name" placeholder="Name">
+    <select id="role">
+      <option value="borrower">Borrower</option>
+      <option value="lender">Lender</option>
+    </select>
+    <button onclick="registerUser()">Register</button>
+  </div>
+  <p id="registerMsg" class="msg"></p>
+</div>
+
+<!-- Borrower Section -->
+<div class="section hidden" id="borrowerSection">
+  <h2>Borrower Dashboard</h2>
+  <div style="display:flex; gap:10px; flex-wrap:wrap;">
+    <input id="loanAmount" placeholder="Loan Amount" type="number">
+    <button onclick="createLoan()">Create Loan</button>
+  </div>
+  <h3>My Loans</h3>
+  <table id="borrowerLoansTable">
+    <thead><tr><th>ID</th><th>Amount</th><th>Status</th><th>Action</th></tr></thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<!-- Lender Section -->
+<div class="section hidden" id="lenderSection">
+  <h2>Lender Dashboard</h2>
+  <h3>Pending Loans</h3>
+  <table id="pendingLoansTable">
+    <thead><tr><th>ID</th><th>Borrower ID</th><th>Amount</th><th>Action</th></tr></thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<script>
+let currentUser = null;
+const API_URL = "http://localhost:3000";
+
+// ---------------- User Registration ----------------
+async function registerUser() {
+  const name = document.getElementById("name").value;
+  const role = document.getElementById("role").value;
+
+  if (!name) {
+    document.getElementById("registerMsg").innerText = "Please enter a name.";
+    return;
+  }
+
+  const res = await fetch(`${API_URL}/users/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, role })
+  });
+  const data = await res.json();
+  currentUser = data;
+
+  document.getElementById("registerMsg").innerText = `Registered as ${data.name} (${data.role})`;
+
+  if (data.role === "borrower") {
+    document.getElementById("borrowerSection").classList.remove("hidden");
+    document.getElementById("lenderSection").classList.add("hidden");
+    loadBorrowerLoans();
+  } else {
+    document.getElementById("lenderSection").classList.remove("hidden");
+    document.getElementById("borrowerSection").classList.add("hidden");
+    loadPendingLoans();
+  }
+}
+
+// ---------------- Borrower Functions ----------------
+async function createLoan() {
+  const amount = document.getElementById("loanAmount").value;
+  if (!amount || amount <= 0) return alert("Enter a valid loan amount.");
+
+  await fetch(`${API_URL}/loans`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ borrowerId: currentUser.id, amount })
+  });
+  document.getElementById("loanAmount").value = "";
+  loadBorrowerLoans();
+}
+
+async function repayLoan(loanId) {
+  await fetch(`${API_URL}/loans/${loanId}/repay`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ borrowerId: currentUser.id })
+  });
+  loadBorrowerLoans();
+}
+
+async function loadBorrowerLoans() {
+  const res = await fetch(`${API_URL}/loans`);
+  const loans = await res.json();
+  const tableBody = document.querySelector("#borrowerLoansTable tbody");
+  tableBody.innerHTML = "";
+  loans.filter(l => l.borrowerId === currentUser.id).forEach(loan => {
+    const action = loan.status === "funded"
+      ? `<button onclick="repayLoan('${loan.id}')">Repay</button>`
+      : "-";
+    tableBody.innerHTML += `<tr>
+      <td>${loan.id}</td>
+      <td>${loan.amount}</td>
+      <td>${loan.status}</td>
+      <td>${action}</td>
+    </tr>`;
+  });
+}
+
+// ---------------- Lender Functions ----------------
+async function fundLoan(loanId) {
+  await fetch(`${API_URL}/loans/${loanId}/fund`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ lenderId: currentUser.id })
+  });
+  loadPendingLoans();
+}
+
+async function loadPendingLoans() {
+  const res = await fetch(`${API_URL}/loans`);
+  const loans = await res.json();
+  const tableBody = document.querySelector("#pendingLoansTable tbody");
+  tableBody.innerHTML = "";
+  loans.filter(l => l.status === "pending").forEach(loan => {
+    tableBody.innerHTML += `<tr>
+      <td>${loan.id}</td>
+      <td>${loan.borrowerId}</td>
+      <td>${loan.amount}</td>
+      <td><button onclick="fundLoan('${loan.id}')">Fund</button></td>
+    </tr>`;
+  });
+}
+</script>
+
+</body>
+</html>
